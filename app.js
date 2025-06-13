@@ -23,7 +23,7 @@ const db = new sqlite3.Database("user.db"); // Instância para uso do Sqlite3, e
 db.serialize(() => {
   // Este método permite enviar comandos SQL em modo 'sequencial'
   db.run(
-    `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+    `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT, password TEXT, email TEXT, celular TEXT, cpf TEXT, rg TEXT)`
   );
 });
@@ -45,11 +45,11 @@ app.use(
 // Middleware para isto, que neste caso é o express.static, que gerencia rotas estáticas
 app.use("/static", express.static(__dirname + "/static"));
 
-//Middleware para processar requisições e envio de JSON
+// Middleware para processar requisições e envio de JSON
 app.use(express.json());
 
 // Middleware para processar as requisições do Body Parameters do cliente
-//app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.urlencoded({ extended: true }));
 
 // Configurar EJS como o motor de visualização
 app.set("view engine", "ejs");
@@ -62,7 +62,7 @@ const login = 'Vc está na página "Login"<br><a href="/">Voltar</a>';
 const cadastro = 'Vc está na página "Cadastro"<br><a href="/">Voltar</a>';
 
 
-/* Método express.get necessita de dois parâmetros 
+/* Método express.get necessita de dois parâmetros
  Na ARROW FUNCTION, o primeiro são os dados do servidor (REQUISITION - 'req')
  o segundo, são os dados que serão enviados ao cliente (RESULT - 'res') */
 
@@ -106,51 +106,82 @@ app.get("/cadastro", (req, res) => {
 // POST do cadastro
 app.post("/cadastro", (req, res) => {
   console.log("POST /cadastro - Recebido");
-  // Linha para depurar se esta vindo dados no req.body
+
   if (!req.body || Object.keys(req.body).length === 0) {
-    console.log("Corpo da requisição vazio.");
-    return res.status(400).json({ success: false, message: "Nenhum dado recebido." });
+    console.log("Corpo da requisição vazio.")
+    return res.status(400).json({ success: false, message: "Nenhum dado recebido." })
   }
 
-  const { username, password, email, celular, cpf, rg } = req.body;
+  console.log("Corpo da requisição:", JSON.stringify(req.body, null, 2))
 
-  if(!username || !password || !email) {
+  const { username, password, email, celular, cpf, rg } = req.body;
+  // Colocar aqui as validações e inclusão no banco de dados do cadastro do usuário
+  // 1. Validar dados do usuário
+  // 2. saber se ele já existe no banco
+
+  if (!username || !password || !email) {
     return res.status(400).json({
       success: false,
-      message: "Nome de usuário, senha e email são obrigatórios."
-    });
+      message: "Nome do usuário, senha e email são obrigatórios"
+    })
   }
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if(!emailRegex.test(email)){
-    return res.status(400).json({ success: false, message: "Formato de email inválido."})
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ success: false, message: "Formato do email inválido" })
   }
-  const checkUserQuery = "SELECT * FROM user WHERE username = ? OR email = ?";
-  db.get(checkUserQuery, [username, email], (err, row)) => {
-    if(err){
+
+  const checkUserQuery = "SELECT * FROM users WHERE username = ? OR email = ?";
+  db.get(checkUserQuery, [username, email], (err, row) => {
+    if (err) {
       console.error("Erro ao consultar o banco (verificar usuário):", err.message);
       return res.status(500).json({
         success: false,
-        message: "Erro interno do servidor ao verificar usuário.",
+        message: "Erro interno do servidor ao verificar usuário."
       });
     }
-    console.log("Resultado da consulta de usuário existente:", row);
+
+    console.log("Resultado da consulta de usuário existente:", row)
 
     if (row) {
       let conflictField = "";
       if (row.username === username) {
         conflictField = "Nome de usuário";
-      }else if (row.email === email){
-        conflictField = "Email";
+      } else if (row.email === email) {
+        conflictField = "Email"
       }
       return res.status(409).json({
         success: false,
-        message: `${conflictField} já cadastrado. Por favor, escolha outro.`
+        message: `${conflictField} já cadastrado. Por favor, escolha outro.`,
       });
-    }
-  } 
+    } else {
+      const insertQuery =
+        "INSERT INTO users (username, password, email, celular, cpf, rg) VALUES (?, ?, ?, ?, ?, ?)";
 
-// Pregramação de rotas do método GET do HTTP 'app.get()'
+      db.run(
+        insertQuery,
+        [username, password, email, celular, cpf, rg],
+        function (err) {
+          if (err) {
+            console.error("Erro ao inserir usuário no banco:", err.message);
+            return res.status(500).json({
+              success: false,
+              message: "Erro interno do servidor ao cadastrar usuário"
+            });
+          }
+          console.log(`Usuário ${username} cadastrado com ID: ${this.lastID}`);
+          return rest.status(201).json({
+            success: true,
+            message: "Usuário cadastrado com sucesso!",
+            userID: this.lastID,
+          });
+        }
+      );
+    }
+  });
+});
+
+// Programação de rotas do método GET do HTTP 'app.get()'
 app.get("/sobre", (req, res) => {
   console.log("GET /sobre");
   // Rota raiz do meu servidor, acesse o browser com o endereço http://localhost:8000/sobre
@@ -203,7 +234,7 @@ app.post("/login", (req, res) => {
 });
 
 app.get("/dashboard", (req, res) => {
-  console.log("GET /dashboard", req.status);
+  console.log("GET /dashboard");
   console.log(JSON.stringify(config));
 
   if (req.session.loggedin) {
